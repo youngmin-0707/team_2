@@ -1,7 +1,15 @@
+"""API 동작 검증.
+
+실행 방법:
+    backend 폴더에서 `python -m pytest -q`를 실행합니다.
+
+영상 분석 테스트는 OpenAI 호출을 모의 처리해 프레임·타임스탬프 API 계약을 검증합니다.
+"""
+
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.schemas import TravelImageAnalysis
+from app.schemas import TravelImageAnalysis, VideoAnalysisResult
 
 
 client = TestClient(app)
@@ -113,3 +121,37 @@ def test_tts_marks_synthetic_audio(monkeypatch) -> None:
     response = client.post("/api/media/tts", json={"text": "안녕하세요.", "voice": "coral"})
     assert response.status_code == 200
     assert response.headers["x-synthetic-voice"] == "true"
+
+
+def test_video_analysis_accepts_frames_and_timestamps(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.routers.media_router.analyze_video_frames",
+        lambda frames, timestamps, language: VideoAnalysisResult(
+            summary="A person walks through a park.",
+            language=language,
+            frame_count=len(frames),
+        ),
+    )
+    response = client.post(
+        "/api/media/video-analysis",
+        files=[
+            ("frames", ("frame-1.jpg", b"frame-1", "image/jpeg")),
+            ("frames", ("frame-2.jpg", b"frame-2", "image/jpeg")),
+        ],
+        data={"frame_timestamps": "[0, 5]", "language": "en"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {
+        "summary": "A person walks through a park.",
+        "language": "en",
+        "frame_count": 2,
+    }
+
+
+def test_video_analysis_rejects_invalid_timestamps() -> None:
+    response = client.post(
+        "/api/media/video-analysis",
+        files={"frames": ("frame-1.jpg", b"frame-1", "image/jpeg")},
+        data={"frame_timestamps": "not-json", "language": "ko"},
+    )
+    assert response.status_code == 422

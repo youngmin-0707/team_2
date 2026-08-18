@@ -83,6 +83,15 @@ class TravelImageAnalysis(BaseModel):
     safety_notes: list[str] = Field(default_factory=list, max_length=10)
 
 
+class VideoAnalysisDraft(BaseModel):
+    summary: str = Field(min_length=1, max_length=2000)
+
+
+class VideoAnalysisResult(VideoAnalysisDraft):
+    language: Literal["ko", "en"]
+    frame_count: int = Field(ge=1, le=12)
+
+
 class TtsRequest(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
     voice: Literal[
