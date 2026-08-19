@@ -9,8 +9,8 @@ app = FastAPI(title="Mini Agent 01 · LLM 판단에서 서비스 연결까지")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:8501", 
-                   "http://127.0.0.1:8501"
-                   "https://9bbyrmawmtasbjghg8ahcg.streamlit.app/"
+                   "http://127.0.0.1:8501",
+                   "https://9bbyrmawmtasbjghg8ahcg.streamlit.app"
                    ],
     allow_credentials=False,
     allow_methods=["POST"],
