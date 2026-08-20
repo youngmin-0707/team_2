@@ -1,17 +1,27 @@
 {
     "python-envs.pythonProjects": [
         {
-            "path": "mini_agent_01_llm",
+            "path": "backend",
             "envManager": "ms-python.python:venv",
             "packageManager": "ms-python.python:pip"
         },
         {
-            "path": "mini_agent_02_structured_output",
+            "path": "frontend",
             "envManager": "ms-python.python:venv",
             "packageManager": "ms-python.python:pip"
         },
         {
-            "path": "mini_agent_03_tool",
+            "path": "learning_unit",
+            "envManager": "ms-python.python:venv",
+            "packageManager": "ms-python.python:pip"
+        },
+        {
+            "path": "solution",
+            "envManager": "ms-python.python:venv",
+            "packageManager": "ms-python.python:pip"
+        },
+        {
+            "path": "starter",
             "envManager": "ms-python.python:venv",
             "packageManager": "ms-python.python:pip"
         }

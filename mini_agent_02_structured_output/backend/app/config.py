@@ -28,6 +28,20 @@ class Settings:
         os.getenv("REQUEST_TIMEOUT_SECONDS", "60")
     )
     kakao_rest_api_key: str = os.getenv("KAKAO_REST_API_KEY", "")
+    kakao_mobility_base_url: str = os.getenv(
+        "KAKAO_MOBILITY_BASE_URL",
+        "https://apis-navi.kakaomobility.com",
+    ).rstrip("/")
+
+    open_meteo_base_url: str = os.getenv(
+        "OPEN_METEO_BASE_URL",
+        "https://api.open-meteo.com",
+    ).rstrip("/")
+
+    open_meteo_geocoding_url: str = os.getenv(
+        "OPEN_METEO_GEOCODING_URL",
+        "https://geocoding-api.open-meteo.com",
+    ).rstrip("/")
 
 
 settings = Settings()

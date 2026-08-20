@@ -80,3 +80,31 @@ def compare_structured_outputs(
         "/api/structured/compare",
         json={"providers": providers, "message": message, "schema_type": schema_type},
     )
+
+def run_travel_agent(provider: str, message: str):
+    return request(
+        "POST",
+        "/api/agent/travel",
+        json={
+            "provider": provider,
+            "message": message,
+        },
+    )
+
+
+def run_selected_travel_plan(
+    city: str,
+    start_date: str,
+    end_date: str,
+    interest: str,
+):
+    return request(
+        "POST",
+        "/api/agent/travel/selected",
+        json={
+            "city": city,
+            "start_date": start_date,
+            "end_date": end_date,
+            "interest": interest,
+        },
+    )

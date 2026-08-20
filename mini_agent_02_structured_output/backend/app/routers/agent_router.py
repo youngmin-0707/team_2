@@ -1,3 +1,4 @@
+from app.services.concept_service import compare_decisions
 import logging
 from dataclasses import asdict
 
@@ -24,14 +25,23 @@ from app.schemas import (
     StructuredValidationRequest,
     StructuredValidationResult,
     TravelIntentResult,
+    TravelAgentRequest,
+    TravelAgentResponse,
+    SelectedTravelPlanRequest,
+    SelectedTravelPlanResponse,
     TravelLandmarks,
     TravelLandmarksRequest,
     TravelLandmarksResponse,
 )
-from app.services.concept_service import compare_decisions
+from app.services.travel_agent_service import (
+    run_mock_travel_agent,
+    run_openai_travel_agent,
+    run_selected_travel_plan,
+)
 from app.services.kakao_local_service import correct_landmark_coordinates
-from app.services.prompt_service import build_prompt
 from app.services.travel_classifier import classify_travel_request
+from app.services.prompt_service import build_prompt
+
 
 
 LLM_TAG = "Mini Agent 01 - LLM"
@@ -55,6 +65,53 @@ def providers() -> dict:
 @agent_router.post("/api/concepts/compare", response_model=ConceptCompareResult, tags=[LLM_TAG])
 def compare_concepts(payload: MessageRequest) -> ConceptCompareResult:
     return ConceptCompareResult.model_validate(compare_decisions(payload.message))
+
+@agent_router.post(
+    "/api/agent/travel",
+    response_model=TravelAgentResponse,
+    tags=["Travel Tool Calling"],
+)
+def run_travel_agent(payload: TravelAgentRequest) -> TravelAgentResponse:
+    if payload.provider == "mock":
+        return run_mock_travel_agent(payload.message)
+
+    try:
+        return run_openai_travel_agent(payload.message)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=422,
+            detail=str(error),
+        ) from error
+    except Exception as error:
+        raise HTTPException(
+            status_code=502,
+            detail=f"OpenAI Tool Calling에 실패했습니다: {error}",
+        ) from error
+
+
+@agent_router.post(
+    "/api/agent/travel/selected",
+    response_model=SelectedTravelPlanResponse,
+    tags=["Travel Tool Calling"],
+)
+def run_selected_travel_agent(
+    payload: SelectedTravelPlanRequest,
+) -> SelectedTravelPlanResponse:
+    try:
+        result = run_selected_travel_plan(
+            payload.city,
+            payload.start_date,
+            payload.end_date,
+            payload.interest,
+        )
+        return SelectedTravelPlanResponse.model_validate(result.model_dump())
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(
+            status_code=502,
+            detail=f"선택형 여행 플래너 실행에 실패했습니다: {error}",
+        ) from error
 
 
 @agent_router.post("/api/travel/classify", response_model=TravelIntentResult, tags=[LLM_TAG])

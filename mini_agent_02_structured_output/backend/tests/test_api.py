@@ -1,5 +1,5 @@
 from fastapi.testclient import TestClient
-
+from app.config import settings
 from app.main import app
 from app.schemas import TravelImageAnalysis
 
@@ -11,7 +11,7 @@ def test_health() -> None:
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["stage"] == "mini_agent_02_structured_output"
-    assert response.json()["default_provider"] == "mock"
+    assert response.json()["default_provider"] == settings.llm_provider
 
 
 def test_provider_list_does_not_expose_keys() -> None:
@@ -211,3 +211,156 @@ def test_image_and_tts_routes_are_kept_from_unit_01(monkeypatch) -> None:
     audio = client.post("/api/media/tts", json={"text": "안내문", "voice": "coral"})
     assert image.status_code == 200
     assert audio.headers["x-synthetic-voice"] == "true"
+
+def test_travel_agent_asks_for_city() -> None:
+    response = client.post(
+        "/api/agent/travel",
+        json={
+            "provider": "mock",
+            "message": "하루 여행 일정을 짜줘",
+        },
+    )
+
+    assert response.status_code == 200
+
+    body = response.json()
+    assert body["tool_executions"] == []
+    assert body["follow_up_question"]
+
+
+def test_travel_agent_asks_for_date_before_itinerary() -> None:
+    response = client.post(
+        "/api/agent/travel",
+        json={
+            "provider": "mock",
+            "message": "부산 하루 여행 일정을 짜줘",
+        },
+    )
+
+    assert response.status_code == 200
+
+    body = response.json()
+    assert body["tool_executions"] == []
+    assert "YYYY-MM-DD" in body["follow_up_question"]
+
+
+def test_mock_travel_agent_runs_four_tools_for_itinerary(monkeypatch) -> None:
+    def fake_run_tool(tool_name: str, arguments: dict) -> dict:
+        if tool_name == "search_places":
+            return {
+                "city": arguments["city"],
+                "query": arguments["query"],
+                "items": [
+                    {
+                        "name": "장소 A",
+                        "address": "부산시 A",
+                        "category": "관광지",
+                        "latitude": 35.1,
+                        "longitude": 129.1,
+                    },
+                    {
+                        "name": "장소 B",
+                        "address": "부산시 B",
+                        "category": "관광지",
+                        "latitude": 35.2,
+                        "longitude": 129.2,
+                    },
+                ],
+            }
+
+        if tool_name == "get_weather":
+            return {
+                "city": arguments["city"],
+                "precipitation_probability_percent": 20,
+            }
+
+        if tool_name == "get_route":
+            return {
+                "mode": arguments["mode"],
+                "duration_minutes": 15,
+            }
+
+        if tool_name == "create_itinerary":
+            return {
+                "weather_note": "야외 이동에 무난한 날씨입니다.",
+                "items": arguments["places"],
+            }
+
+        raise AssertionError(f"예상하지 못한 도구: {tool_name}")
+
+    monkeypatch.setattr(
+        "app.services.travel_agent_service.run_tool",
+        fake_run_tool,
+    )
+
+    response = client.post(
+        "/api/agent/travel",
+        json={
+            "provider": "mock",
+            "message": "2026-09-01 부산 하루 여행 일정을 짜줘",
+        },
+    )
+
+    assert response.status_code == 200
+
+    body = response.json()
+
+    assert [item["tool_name"] for item in body["tool_executions"]] == [
+        "search_places",
+        "get_weather",
+        "get_route",
+        "create_itinerary",
+    ]
+    assert all(item["success"] for item in body["tool_executions"])
+
+
+def test_selected_travel_plan_uses_real_pipeline_shape(monkeypatch) -> None:
+    def fake_run_tool(tool_name: str, arguments: dict) -> dict:
+        if tool_name == "search_places":
+            return {
+                "items": [
+                    {"name": "장소 A", "address": "부산 A", "latitude": 35.1, "longitude": 129.1},
+                    {"name": "장소 B", "address": "부산 B", "latitude": 35.2, "longitude": 129.2},
+                ]
+            }
+        raise AssertionError(tool_name)
+
+    monkeypatch.setattr("app.services.travel_agent_service.run_tool", fake_run_tool)
+    monkeypatch.setattr(
+        "app.services.travel_agent_service.get_weather_forecast_range",
+        lambda *_: {"days": [{"condition": "맑음", "precipitation_probability_percent": 10}]},
+    )
+    monkeypatch.setattr(
+        "app.services.travel_agent_service.get_car_route",
+        lambda *_: {
+            "mode": "car",
+            "duration_minutes": 18,
+            "path": [[129.1, 35.1], [129.2, 35.2]],
+            "source": "kakao-mobility",
+        },
+    )
+    monkeypatch.setattr(
+        "app.services.travel_agent_service.generate_selected_itinerary",
+        lambda *_: "실제 데이터 기반 추천 일정입니다.",
+    )
+
+    response = client.post(
+        "/api/agent/travel/selected",
+        json={
+            "city": "부산",
+            "start_date": "2026-09-01",
+            "end_date": "2026-09-03",
+            "interest": "cafe",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "openai"
+    assert len(body["places"]) == 2
+    assert body["weather"]["days"][0]["precipitation_probability_percent"] == 10
+    assert body["routes"][0]["path"] == [[129.1, 35.1], [129.2, 35.2]]
+    assert body["final_answer"] == "실제 데이터 기반 추천 일정입니다."
+    assert [item["tool_name"] for item in body["tool_executions"]] == [
+        "search_places", "get_weather", "get_route", "create_itinerary"
+    ]

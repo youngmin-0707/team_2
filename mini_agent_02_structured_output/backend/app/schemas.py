@@ -1,6 +1,6 @@
 from typing import Any, Literal
-
-from pydantic import BaseModel, ConfigDict, Field
+from datetime import date
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 ProviderName = Literal["mock", "gemini", "openai", "ollama"]
@@ -263,3 +263,67 @@ class TtsRequest(BaseModel):
         default="한국어로 또렷하고 따뜻한 여행 가이드처럼 말하세요.",
         max_length=500,
     )
+
+class SearchPlacesArgs(BaseModel):
+    city: str = Field(min_length=1, max_length=100)
+    query: str = Field(min_length=1, max_length=100)
+
+
+class WeatherArgs(BaseModel):
+    city: str = Field(min_length=1, max_length=100)
+    target_date: date
+
+
+class RouteArgs(BaseModel):
+    origin: str = Field(min_length=1, max_length=200)
+    destination: str = Field(min_length=1, max_length=200)
+    mode: Literal["walk", "car", "transit"] = "walk"
+
+
+class ItineraryArgs(BaseModel):
+    city: str = Field(min_length=1, max_length=100)
+    target_date: date
+    places: list[dict[str, Any]] = Field(default_factory=list)
+    weather: dict[str, Any] | None = None
+    routes: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class TravelAgentRequest(MessageRequest):
+    provider: Literal["mock", "openai"] = "mock"
+
+
+class ToolExecution(BaseModel):
+    tool_name: str
+    arguments: dict[str, Any]
+    success: bool
+    data: dict[str, Any] | None = None
+    error: str | None = None
+
+
+class TravelAgentResponse(BaseModel):
+    provider: Literal["mock", "openai"]
+    tool_executions: list[ToolExecution] = Field(default_factory=list)
+    final_answer: str
+    follow_up_question: str | None = None
+
+
+class SelectedTravelPlanRequest(BaseModel):
+    city: str = Field(min_length=1, max_length=100)
+    start_date: date
+    end_date: date
+    interest: Literal["attraction", "cafe", "restaurant", "indoor"]
+
+    @model_validator(mode="after")
+    def validate_trip_period(self) -> "SelectedTravelPlanRequest":
+        if self.end_date < self.start_date:
+            raise ValueError("여행 종료일은 시작일보다 빠를 수 없습니다.")
+        if (self.end_date - self.start_date).days > 6:
+            raise ValueError("첫 버전에서는 최대 7일 일정까지 만들 수 있습니다.")
+        return self
+
+
+class SelectedTravelPlanResponse(TravelAgentResponse):
+    provider: Literal["openai"] = "openai"
+    places: list[dict[str, Any]] = Field(default_factory=list)
+    weather: dict[str, Any] | None = None
+    routes: list[dict[str, Any]] = Field(default_factory=list)
