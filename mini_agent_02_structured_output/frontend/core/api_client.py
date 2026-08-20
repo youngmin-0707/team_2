@@ -6,7 +6,7 @@ from typing import Any
 import httpx
 
 
-BACKEND_URL = os.getenv("BACKEND_API_URL", "http://127.0.0.1:8000").rstrip("/")
+BACKEND_URL = os.getenv("BACKEND_API_URL", "https://team-2-8rh6.onrender.com").rstrip("/")
 REQUEST_TIMEOUT = 70.0
 
 
