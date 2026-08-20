@@ -4,7 +4,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 ProviderName = Literal["mock", "gemini", "openai", "ollama"]
-StructuredSchemaName = Literal["travel_plan", "support_ticket"]
+StructuredSchemaName = Literal[
+    "travel_plan",
+    "support_ticket",
+    "travel_landmarks",
+]
 
 
 class MessageRequest(BaseModel):
@@ -94,6 +98,80 @@ class TravelPlan(BaseModel):
     cautions: list[str] = Field(default_factory=list, max_length=10)
 
 
+class Landmark(BaseModel):
+    """지도에 표시할 여행 장소 한 곳의 정보."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(
+        min_length=1,
+        max_length=100,
+        description="랜드마크 이름",
+    )
+    description: str = Field(
+        min_length=1,
+        max_length=300,
+        description="랜드마크 설명",
+    )
+    address: str = Field(
+        min_length=1,
+        max_length=200,
+        description="사람이 읽을 수 있는 장소 주소 또는 위치",
+    )
+    latitude: float = Field(
+        ge=-90,
+        le=90,
+        description="위도",
+    )
+    longitude: float = Field(
+        ge=-180,
+        le=180,
+        description="경도",
+    )
+
+
+class TravelLandmarks(BaseModel):
+    """여행 질문에 대한 랜드마크 목록 응답."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    destination: str = Field(
+        min_length=1,
+        max_length=100,
+        description="여행 목적지",
+    )
+    summary: str = Field(
+        min_length=1,
+        max_length=500,
+        description="여행지 요약",
+    )
+    landmarks: list[Landmark] = Field(
+        min_length=1,
+        max_length=10,
+        description="지도에 표시할 랜드마크 목록",
+    )
+
+class TravelLandmarksRequest(MessageRequest):
+    """여행 질문을 받아 지도용 랜드마크를 생성하는 요청."""
+
+    provider: ProviderName | None = None
+    system_prompt: str = Field(
+        default=(
+            "당신은 여행 장소 추천 도우미입니다. 사용자의 여행 질문에서 "
+            "추천할 랜드마크를 찾아 제공된 형식에 맞게 작성하세요."
+        ),
+        max_length=2000,
+    )
+
+
+class TravelLandmarksResponse(BaseModel):
+    """카카오 장소 검색으로 보정된 지도용 랜드마크 응답."""
+
+    provider: ProviderName
+    model: str
+    content: TravelLandmarks
+    latency_ms: int
+
 class SupportTicket(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -112,7 +190,7 @@ class StructuredValidationRequest(BaseModel):
 class StructuredValidationResult(BaseModel):
     schema_type: StructuredSchemaName
     valid: bool
-    data: TravelPlan | SupportTicket | None = None
+    data: TravelPlan | SupportTicket | TravelLandmarks | None = None
     errors: list[dict[str, Any]] = Field(default_factory=list)
 
 
@@ -132,7 +210,7 @@ class StructuredOutputResult(BaseModel):
     provider: ProviderName
     model: str
     schema_type: StructuredSchemaName
-    content: TravelPlan | SupportTicket
+    content: TravelPlan | SupportTicket | TravelLandmarks
     latency_ms: int
 
 
@@ -155,7 +233,7 @@ class StructuredComparisonItem(BaseModel):
     status: Literal["success", "error"]
     model: str = ""
     schema_type: StructuredSchemaName
-    content: TravelPlan | SupportTicket | None = None
+    content: TravelPlan | SupportTicket | TravelLandmarks | None = None
     latency_ms: int = 0
     error: str | None = None
 

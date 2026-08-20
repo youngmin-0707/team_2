@@ -124,6 +124,60 @@ def test_mock_support_ticket_matches_contract() -> None:
     assert response.json()["content"]["category"] == "billing"
 
 
+def test_mock_travel_landmarks_matches_contract() -> None:
+    response = client.post(
+        "/api/structured/generate",
+        json={
+            "provider": "mock",
+            "schema_type": "travel_landmarks",
+            "message": "부산에서 하루 동안 갈 만한 여행지를 추천해 주세요.",
+        },
+    )
+
+    assert response.status_code == 200
+
+    body = response.json()
+    assert body["provider"] == "mock"
+    assert body["schema_type"] == "travel_landmarks"
+    assert body["content"]["destination"] == "부산"
+    assert len(body["content"]["landmarks"]) == 3
+
+    first_landmark = body["content"]["landmarks"][0]
+    assert first_landmark["name"] == "해운대 해수욕장"
+    assert first_landmark["latitude"] == 35.1587
+    assert first_landmark["longitude"] == 129.1604
+
+
+def test_travel_landmarks_validation_rejects_invalid_coordinates() -> None:
+    response = client.post(
+        "/api/structured/validate",
+        json={
+            "schema_type": "travel_landmarks",
+            "payload": {
+                "destination": "부산",
+                "summary": "좌표 검증 테스트",
+                "landmarks": [
+                    {
+                        "name": "테스트 장소",
+                        "description": "잘못된 좌표를 가진 장소입니다.",
+                        "address": "부산광역시",
+                        "latitude": 100.0,
+                        "longitude": 200.0,
+                    }
+                ],
+            },
+        },
+    )
+
+    assert response.status_code == 200
+
+    body = response.json()
+    assert body["schema_type"] == "travel_landmarks"
+    assert body["valid"] is False
+
+    error_fields = {item["field"] for item in body["errors"]}
+    assert "landmarks.0.latitude" in error_fields
+    assert "landmarks.0.longitude" in error_fields
 def test_legacy_travel_plan_route_remains_compatible() -> None:
     response = client.post("/api/structured/travel-plan", json={
         "provider": "mock", "message": "강릉 여행을 추천해 주세요."

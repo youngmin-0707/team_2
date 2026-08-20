@@ -62,6 +62,15 @@ def generate_structured_output(provider: str, message: str, schema_type: str):
         json={"provider": provider, "message": message, "schema_type": schema_type},
     )
 
+def generate_travel_landmarks(provider: str, message: str):
+    return request(
+        "POST",
+        "/api/travel/landmarks",
+        json={
+            "provider": provider,
+            "message": message,
+        },
+    )
 
 def compare_structured_outputs(
     providers: list[str], message: str, schema_type: str = "travel_plan"

@@ -8,3 +8,5 @@ python-dotenv
 pytest
 streamlit
 uvicorn
+pandas
+pydeck

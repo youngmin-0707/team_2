@@ -27,6 +27,7 @@ class Settings:
     request_timeout_seconds: float = float(
         os.getenv("REQUEST_TIMEOUT_SECONDS", "60")
     )
+    kakao_rest_api_key: str = os.getenv("KAKAO_REST_API_KEY", "")
 
 
 settings = Settings()

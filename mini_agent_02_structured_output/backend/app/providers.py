@@ -3,7 +3,12 @@ from time import perf_counter
 from typing import Any
 
 from app.config import settings
-from app.schemas import StructuredSchemaName, SupportTicket, TravelPlan
+from app.schemas import (
+    StructuredSchemaName,
+    SupportTicket,
+    TravelLandmarks,
+    TravelPlan,
+)
 
 
 @dataclass
@@ -22,13 +27,53 @@ def generate_mock(system_prompt: str, message: str) -> ProviderResult:
 
 def get_structured_model(
     schema_type: StructuredSchemaName,
-) -> type[TravelPlan] | type[SupportTicket]:
-    return {"travel_plan": TravelPlan, "support_ticket": SupportTicket}[schema_type]
-
+) -> type[TravelPlan] | type[SupportTicket] | type[TravelLandmarks]:
+    return {
+        "travel_plan": TravelPlan,
+        "support_ticket": SupportTicket,
+        "travel_landmarks": TravelLandmarks,
+    }[schema_type]
 
 def generate_structured_mock(
-    system_prompt: str, message: str, schema_type: StructuredSchemaName
+    system_prompt: str,
+    message: str,
+    schema_type: StructuredSchemaName,
 ) -> ProviderResult:
+    if schema_type == "travel_landmarks":
+        landmarks = TravelLandmarks(
+            destination="부산",
+            summary="해운대 일대의 대표적인 바다와 산책 명소를 추천합니다.",
+            landmarks=[
+                {
+                    "name": "해운대 해수욕장",
+                    "description": "부산을 대표하는 해변으로 산책과 야경 감상에 좋습니다.",
+                    "address": "부산광역시 해운대구 우동",
+                    "latitude": 35.1587,
+                    "longitude": 129.1604,
+                },
+                {
+                    "name": "동백섬",
+                    "description": "해운대 해변 옆에 있는 해안 산책로와 누리마루가 있는 섬입니다.",
+                    "address": "부산광역시 해운대구 우동 710-1",
+                    "latitude": 35.1549,
+                    "longitude": 129.1526,
+                },
+                {
+                    "name": "더베이101",
+                    "description": "마린시티 야경과 요트를 볼 수 있는 해운대의 복합 문화 공간입니다.",
+                    "address": "부산광역시 해운대구 동백로 52",
+                    "latitude": 35.1565,
+                    "longitude": 129.1523,
+                },
+            ],
+        )
+        return ProviderResult(
+            "mock",
+            "deterministic-landmark-mock",
+            landmarks.model_dump(),
+            0,
+        )
+
     if schema_type == "support_ticket":
         category = (
             "billing"
@@ -38,27 +83,36 @@ def generate_structured_mock(
         ticket = SupportTicket(
             category=category,
             priority="medium",
-            summary="담당 팀의 확인이 필요한 고객 문의입니다.",
+            summary="확인을 위해 추가 정보가 필요한 고객 문의입니다.",
             requires_human=True,
             missing_information=(
                 ["주문 번호"] if category == "billing" else ["오류 발생 시각"]
             ),
         )
         return ProviderResult(
-            "mock", "deterministic-support-mock", ticket.model_dump(), 0
+            "mock",
+            "deterministic-support-mock",
+            ticket.model_dump(),
+            0,
         )
+
     destination = next(
         (city for city in ("서울", "부산", "제주", "강릉") if city in message),
         "부산",
     )
     plan = TravelPlan(
         destination=destination,
-        summary=f"{destination}의 대표 장소를 둘러보는 교육용 일정입니다.",
+        summary=f"{destination}의 주요 장소를 둘러보는 기본 여행 일정입니다.",
         recommended_days=3,
         activities=["지역 명소 방문", "현지 음식 체험"],
-        cautions=["실제 예약 전 가격과 운영 시간을 확인하세요."],
+        cautions=["실제 예약과 가격, 운영 시간은 방문 전에 확인하세요."],
     )
-    return ProviderResult("mock", "deterministic-travel-mock", plan.model_dump(), 0)
+    return ProviderResult(
+        "mock",
+        "deterministic-travel-mock",
+        plan.model_dump(),
+        0,
+    )
 
 
 def generate_openai(system_prompt: str, message: str) -> ProviderResult:
@@ -120,18 +174,24 @@ def generate_structured_gemini(
 ) -> ProviderResult:
     client, types = _gemini_client()
     started = perf_counter()
-    response = client.models.generate_content(
+    model_class = get_structured_model(schema_type)
+
+    # Models.generate_content 대신 Chat.send_message 사용
+    chat = client.chats.create(
         model=settings.gemini_model,
-        contents=message,
         config=types.GenerateContentConfig(
             system_instruction=system_prompt,
             response_mime_type="application/json",
-            response_schema=get_structured_model(schema_type),
+            response_schema=model_class,
         ),
     )
-    parsed = get_structured_model(schema_type).model_validate_json(response.text or "{}")
+    response = chat.send_message(message)
+
+    parsed = model_class.model_validate_json(response.text or "{}")
     return ProviderResult(
-        "gemini", settings.gemini_model, parsed.model_dump(),
+        "gemini",
+        settings.gemini_model,
+        parsed.model_dump(),
         round((perf_counter() - started) * 1000),
     )
 
